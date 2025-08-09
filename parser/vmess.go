@@ -1,4 +1,4 @@
-package tui
+package parser
 
 import (
 	"encoding/base64"
