@@ -1,76 +1,43 @@
 {
-    "dns": {
-        "servers": ["1.1.1.1", "9.9.9.10", "8.8.8.8"]
-    },
-    "inbounds": [
-        {
-            "listen": "127.0.0.1",
-            "port": 1080,
-            "protocol": "socks",
-            "settings": {
-                "allowTransparent": false,
-                "auth": "noauth",
-                "udp": true
-            },
-            "sniffing": {
-                "destOverride": ["http", "tls"],
-                "enabled": true,
-                "routeOnly": false
-            },
-            "tag": "socks"
+  "inbounds": [
+    {
+      "listen": "127.0.0.1",
+      "listen_port": 1080,
+      "sniff": true,
+      "tag": "socks-in",
+      "type": "socks"
+    }
+  ],
+  "log": {
+    "level": "info"
+  },
+  "outbounds": [
+    {
+      "security": "auto",
+      "server": "104.21.30.224",
+      "server_port": 443,
+      "tag": "proxy",
+      "tls": {
+        "enabled": true,
+        "server_name": "server-b.tabatelecom.dev",
+        "utls": {
+          "enabled": true,
+          "fingerprint": ""
         }
-    ],
-    "log": {
-        "loglevel": "none"
-    },
-    "outbounds": [
-        {
-            "mux": {
-                "concurrency": -1,
-                "enabled": false
-            },
-            "protocol": "vmess",
-            "settings": {
-                "vnext": [
-                    {
-                        "address": "104.21.30.224",
-                        "port": 443,
-                        "users": [
-                            {
-                                "alterId": 0,
-                                "email": "t@t.tt",
-                                "id": "a6f8c3a1-69a4-4c7e-8ad6-1b7a2d7f9b4c",
-                                "security": "auto"
-                            }
-                        ]
-                    }
-                ]
-            },
-            "streamSettings": {
-                "network": "ws",
-                "security": "tls",
-                "tlsSettings": {
-                    "allowInsecure": false,
-                    "fingerprint": "",
-                    "serverName": "server-b.tabatelecom.dev"
-                },
-                "wsSettings": {
-                    "headers": {
-                        "Host": "server-b.tabatelecom.dev"
-                    },
-                    "host": "server-b.tabatelecom.dev",
-                    "path": "/"
-                }
-            },
-            "tag": "proxy"
+      },
+      "transport": {
+        "headers": {
+          "Host": "server-b.tabatelecom.dev"
         },
-        {
-            "protocol": "freedom",
-            "settings": {
-                "domainStrategy": "UseIP",
-                "userLevel": 0
-            },
-            "tag": "direct"
-        }
-    ]
+        "path": "/",
+        "type": "ws"
+      },
+      "type": "vmess",
+      "uuid": "a6f8c3a1-69a4-4c7e-8ad6-1b7a2d7f9b4c"
+    },
+    {
+      "tag": "direct",
+      "type": "direct"
+    }
+  ]
 }

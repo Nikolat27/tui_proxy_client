@@ -29,55 +29,37 @@ func VMessToSingBox(vmessLink string) (map[string]any, error) {
 		"log": map[string]any{
 			"level": "info",
 		},
-		"dns": map[string]any{
-			"servers": []map[string]any{
-				{
-					"tag":     "google",
-					"address": "tcp://1.1.1.1",
-				},
-				{
-					"tag":     "cloudflare",
-					"address": "tcp://1.0.0.1",
-				},
-			},
-		},
 		"inbounds": []map[string]any{
 			{
-				"type": "socks",
-				"tag":  "socks-in",
-				"listen": map[string]any{
-					"address": "127.0.0.1",
-					"port":    1080,
-				},
-				"users": []map[string]any{
-					{
-						"name": "default",
-					},
-				},
+				"type":        "socks",
+				"tag":         "socks-in",
+				"listen":      "127.0.0.1",
+				"listen_port": 1080,
+				"sniff":       true,
 			},
 		},
 		"outbounds": []map[string]any{
 			{
-				"type": "vmess",
-				"tag":  "proxy",
-				"server": map[string]any{
-					"address": v["add"],
-					"port":    atoiSafe(v["port"]),
-				},
-				"uuid": v["id"],
-				"security": map[string]any{
-					"type": v["scy"],
-				},
-				"alterId": atoiSafe(v["aid"]),
+				"type":        "vmess",
+				"tag":         "proxy",
+				"server":      v["add"],
+				"server_port": atoiSafe(v["port"]),
+				"uuid":        v["id"],
+				"security":    v["scy"],
 				"transport": map[string]any{
 					"type": v["net"],
 					"path": v["path"],
-					"host": v["host"],
+					"headers": map[string]any{
+						"Host": v["host"],
+					},
 				},
 				"tls": map[string]any{
-					"enabled":     v["tls"] == "tls",
-					"serverName":  v["host"],
-					"fingerprint": v["fp"],
+					"enabled":    v["tls"] == "tls",
+					"server_name": v["host"],
+					"utls": map[string]any{
+						"enabled":     true,
+						"fingerprint": v["fp"],
+					},
 				},
 			},
 			{
@@ -89,6 +71,7 @@ func VMessToSingBox(vmessLink string) (map[string]any, error) {
 
 	return cfg, nil
 }
+
 
 // VMessToV2ray converts a vmess:// link into V2Ray JSON config
 func VMessToV2ray(vmessLink string) (map[string]any, error) {
@@ -195,6 +178,6 @@ func atoiSafe(s string) int {
 	if err != nil {
 		return 0
 	}
-	
+
 	return i
 } 
