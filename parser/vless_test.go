@@ -58,7 +58,7 @@ func TestVLESSToV2Ray(t *testing.T) {
 		t.Fatalf("failed to write %s: %v", fileName, err)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, "v2ray", "run", fileName)
 	output, err := cmd.CombinedOutput()

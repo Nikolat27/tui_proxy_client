@@ -28,7 +28,7 @@ func TestVMessToSingBox(t *testing.T) {
 	}
 
 	// Run sing-box with timeout
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, "sing-box", "run", "-c", fileName)
 	output, err := cmd.CombinedOutput()
