@@ -13,9 +13,11 @@ import (
 // disconnect stops the current connection by killing processes on port 1080 (PID method only)
 func (tui *TUI) disconnect() {
 	go func() {
-		var logs []string
-		var finalStatus string
-		var finalColor tcell.Color
+		var (
+			logs        []string
+			finalStatus string
+			finalColor  tcell.Color
+		)
 
 		logs = append(logs, "Checking port 1080 status...")
 
@@ -31,32 +33,23 @@ func (tui *TUI) disconnect() {
 		if len(pids) == 0 {
 			tui.handleNoProcessesFound(&logs, &finalStatus, &finalColor)
 			return
-		} else {
-			logs = append(logs, fmt.Sprintf("Found %d process(es) on port 1080. Attempting to kill...", len(pids)))
-			success, pidLogs := tui.killProcessesByPID(context.Background(), pids)
-			logs = append(logs, pidLogs...)
-
-			if success {
-				tui.isConnected = false
-				clientType := tui.clientType
-				tui.clientType = ""
-				tui.connectedConfig = ""
-				finalStatus = fmt.Sprintf("Disconnected from %s (port 1080 freed)", clientType)
-				finalColor = tcell.ColorGreen
-			} else {
-				finalStatus = "Failed to free port 1080 - check logs"
-				finalColor = tcell.ColorRed
-			}
 		}
 
-		// Single UI update
-		tui.app.QueueUpdateDraw(func() {
-			tui.configText.SetText(strings.Join(logs, "\n"))
-			tui.updateStatus(finalStatus, finalColor)
-			if !tui.isConnected {
-				tui.connectionStatus.SetText("Status: Not Connected (Port 1080 Free)").SetTextColor(tcell.ColorRed)
-			}
-		})
+		logs = append(logs, fmt.Sprintf("Found %d process(es) on port 1080. Attempting to kill...", len(pids)))
+		success, pidLogs := tui.killProcessesByPID(context.Background(), pids)
+		logs = append(logs, pidLogs...)
+
+		if success {
+			clientType := tui.clientType
+			tui.resetConnectionState()
+			finalStatus = fmt.Sprintf("Disconnected from %s (port 1080 freed)", clientType)
+			finalColor = tcell.ColorGreen
+		} else {
+			finalStatus = "Failed to free port 1080 - check logs"
+			finalColor = tcell.ColorRed
+		}
+
+		tui.updateDisconnectUI(logs, finalStatus, finalColor)
 	}()
 }
 
