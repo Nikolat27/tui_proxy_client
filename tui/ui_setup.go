@@ -57,7 +57,7 @@ func (tui *TUI) createConnectionStatus() *tview.TextView {
 func (tui *TUI) createVMessInput() *tview.InputField {
 	input := tview.NewInputField()
 	input.SetLabel("Proxy Link: ")
-	input.SetPlaceholder("vmess://... ss://... vless://...")
+	input.SetPlaceholder("Supported: vmess, vless and ss")
 	input.SetFieldWidth(80)
 	input.SetBorder(true)
 	input.SetTitle(" Enter Proxy Configuration (VMess/SS/VLESS) ")
@@ -170,6 +170,8 @@ func (tui *TUI) createButtons() *tview.Flex {
 		AddItem(connectBtn, 0, 1, false).
 		AddItem(disconnectBtn, 0, 1, false).
 		AddItem(deleteBtn, 0, 1, false).
+		AddItem(tview.NewBox(), 1, 0, false). // <--- Spacer, 1 column wide
+
 		AddItem(renameBtn, 0, 1, false).
 		AddItem(refreshBtn, 0, 1, false).
 		AddItem(clearBtn, 0, 1, false).
