@@ -6,9 +6,9 @@ import (
 	"os"
 	"strings"
 	"time"
-
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
+	parser "go_v2ray_client/parser"
 )
 
 // addConfig adds the current configuration to the saved list
@@ -24,7 +24,7 @@ func (tui *TUI) addConfig() {
 		return
 	}
 
-	config, err := VMessToSingBox(vmessLink)
+	config, err := parser.VMessToSingBox(vmessLink)
 	if err != nil {
 		tui.updateStatus(fmt.Sprintf("Error parsing VMess: %v", err), tcell.ColorRed)
 		return
@@ -122,7 +122,7 @@ func (tui *TUI) viewConfig(configIndex int) {
 
 	config := tui.configs.Configurations[configIndex]
 
-	parsedConfig, err := VMessToSingBox(config.Link)
+	parsedConfig, err := parser.VMessToSingBox(config.Link)
 	if err != nil {
 		tui.updateStatus(fmt.Sprintf("Error parsing config: %v", err), tcell.ColorRed)
 		return

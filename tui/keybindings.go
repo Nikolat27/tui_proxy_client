@@ -4,47 +4,44 @@ import (
 	"github.com/gdamore/tcell/v2"
 )
 
-// setupKeybindings sets up keyboard shortcuts
+// setupKeybindings registers all global and input-specific shortcuts
 func (tui *TUI) setupKeybindings() {
+	// Global keybindings
 	tui.app.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
-		switch event.Key() {
-		case tcell.KeyCtrlA:
+		switch {
+		case event.Key() == tcell.KeyCtrlA:
 			tui.addConfig()
-			return nil
-		case tcell.KeyCtrlS:
+		case event.Key() == tcell.KeyCtrlS:
 			tui.exportConfig()
-			return nil
-		case tcell.KeyCtrlD:
+		case event.Key() == tcell.KeyCtrlD:
 			tui.deleteSelectedConfig()
-			return nil
-		case tcell.KeyCtrlR:
+		case event.Key() == tcell.KeyCtrlR:
 			tui.renameSelectedConfig()
-			return nil
-		case tcell.KeyCtrlF:
+		case event.Key() == tcell.KeyCtrlF:
 			tui.refreshConfigurations()
-			return nil
-		case tcell.KeyCtrlL:
+		case event.Key() == tcell.KeyCtrlL:
 			tui.clearUI()
-			return nil
-		case tcell.KeyCtrlX:
+		case event.Key() == tcell.KeyCtrlX:
 			tui.disconnect()
-			return nil
-		case tcell.KeyCtrlC:
+		case event.Key() == tcell.KeyCtrlC:
 			tui.app.Stop()
-			return nil
+		default:
+			return event // let other keys pass through
 		}
-		return event
+		return nil // handled key, no further processing
 	})
 
+	// Input field specific keybindings
 	tui.vmessInput.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
-		if event.Key() == tcell.KeyCtrlV {
+		switch event.Key() {
+		case tcell.KeyCtrlV:
 			tui.handlePaste()
 			return nil
-		}
-		if event.Key() == tcell.KeyEnter {
+		case tcell.KeyEnter:
 			tui.parseVMess()
 			return nil
+		default:
+			return event
 		}
-		return event
 	})
 }

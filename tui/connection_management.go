@@ -12,6 +12,7 @@ import (
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
+	parser "go_v2ray_client/parser"
 )
 
 // connectClient is now a high-level wrapper that delegates to helper methods
@@ -170,11 +171,11 @@ func (tui *TUI) connectToConfig() {
 			switch buttonLabel {
 			case "V2Ray":
 				tui.connectClient("v2ray", func(link string) (interface{}, error) {
-					return VMessToV2ray(link)
+					return parser.VMessToV2ray(link)
 				}, []string{"v2ray", "run", "config.json"})
 			case "SingBox":
 				tui.connectClient("singbox", func(link string) (interface{}, error) {
-					return VMessToSingBox(link)
+					return parser.VMessToSingBox(link)
 				}, []string{"sing-box", "run", "-c", "config.json"})
 			}
 			tui.app.SetRoot(tui.mainFlex, true)

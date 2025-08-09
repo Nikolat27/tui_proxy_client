@@ -190,9 +190,11 @@ func atoiSafe(s string) int {
 	if s == "" {
 		return 0
 	}
+
 	i, err := strconv.Atoi(s)
 	if err != nil {
 		return 0
 	}
+	
 	return i
 } 
