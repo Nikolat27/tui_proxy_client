@@ -13,15 +13,9 @@ import (
 
 // addConfig adds the current configuration to the saved list
 func (tui *TUI) addConfig() {
-	vmessLink := tui.vmessInput.GetText()
+	vmessLink := strings.TrimSpace(tui.vmessInput.GetText())
 	if vmessLink == "" {
-		tui.updateStatus("Error: No VMess link to add. Please paste your VMess link in the input field above first.", tcell.ColorRed)
-		return
-	}
-
-	vmessLink = strings.TrimSpace(vmessLink)
-	if vmessLink == "" {
-		tui.updateStatus("Error: No VMess link to add. Please paste your VMess link in the input field above first.", tcell.ColorRed)
+		tui.updateStatus("Error: No VMess link to add. Please paste your VMess link first.", tcell.ColorRed)
 		return
 	}
 
@@ -36,8 +30,12 @@ func (tui *TUI) addConfig() {
 		return
 	}
 
-	configJSON, _ := json.MarshalIndent(config, "", "  ")
-	tui.configText.SetText(string(configJSON))
+	if configJSON, err := json.MarshalIndent(config, "", "  "); err == nil {
+		tui.configText.SetText(string(configJSON))
+	} else {
+		tui.updateStatus(fmt.Sprintf("Error serializing config: %v", err), tcell.ColorRed)
+		return
+	}
 
 	configName := fmt.Sprintf("Config %d", len(tui.configs.Configurations)+1)
 
@@ -52,14 +50,13 @@ func (tui *TUI) addConfig() {
 
 	tui.configs.Configurations = append(tui.configs.Configurations, newConfig)
 
-	err = tui.saveConfigsToFile()
-	if err != nil {
+	if err := tui.saveConfigsToFile(); err != nil {
 		tui.updateStatus(fmt.Sprintf("Error saving config: %v", err), tcell.ColorRed)
 		return
 	}
 
 	tui.refreshConfigList()
-	tui.updateStatus(fmt.Sprintf("Configuration '%s' added, parsed, and saved successfully", configName), tcell.ColorGreen)
+	tui.updateStatus(fmt.Sprintf("Configuration '%s' added and saved successfully", configName), tcell.ColorGreen)
 }
 
 // loadConfigList loads existing configurations from storage
@@ -97,8 +94,7 @@ func (tui *TUI) refreshConfigList() {
 
 // updateConfigCount updates the status to show the current number of configurations
 func (tui *TUI) updateConfigCount() {
-	count := len(tui.configs.Configurations)
-	if count == 0 {
+	if count := len(tui.configs.Configurations); count == 0 {
 		tui.updateStatus("No configurations saved", tcell.ColorYellow)
 	} else {
 		tui.updateStatus(fmt.Sprintf("Loaded %d configuration(s) from configs.json", count), tcell.ColorGreen)
@@ -138,7 +134,8 @@ func (tui *TUI) viewConfig(configIndex int) {
 		return
 	}
 
-	tui.configText.SetText(fmt.Sprintf("Configuration: %s\nProtocol: %s\nLink: %s\nCreated: %s\nLast Used: %s\n\nParsed Configuration:\n%s\n\nReady to connect - click Connect button to start",
+	tui.configText.SetText(fmt.Sprintf(
+		"Configuration: %s\nProtocol: %s\nLink: %s\nCreated: %s\nLast Used: %s\n\nParsed Configuration:\n%s\n\nReady to connect - click Connect button to start",
 		config.Name, config.Protocol, config.Link, config.CreatedAt[:10], config.LastUsed[:10], string(configJSON)))
 
 	tui.vmessInput.SetText(config.Link)
@@ -164,11 +161,12 @@ func (tui *TUI) deleteSelectedConfig() {
 
 	config := tui.configs.Configurations[currentIndex]
 
-	tui.configs.Configurations = append(tui.configs.Configurations[:currentIndex],
-		tui.configs.Configurations[currentIndex+1:]...)
+	tui.configs.Configurations = append(
+		tui.configs.Configurations[:currentIndex],
+		tui.configs.Configurations[currentIndex+1:]...,
+	)
 
-	err := tui.saveConfigsToFile()
-	if err != nil {
+	if err := tui.saveConfigsToFile(); err != nil {
 		tui.updateStatus(fmt.Sprintf("Error saving after deletion: %v", err), tcell.ColorRed)
 		return
 	}
@@ -194,6 +192,7 @@ func (tui *TUI) renameSelectedConfig() {
 
 	config := tui.configs.Configurations[currentIndex]
 
+	// Keep the type as *tview.InputField
 	nameInput := tview.NewInputField()
 	nameInput.SetLabel("New Name: ")
 	nameInput.SetText(config.Name)
@@ -203,8 +202,12 @@ func (tui *TUI) renameSelectedConfig() {
 
 	renameModal := tview.NewModal().
 		SetText("Press Enter to save, Esc to cancel").
-		AddButtons([]string{"Cancel"})
+		AddButtons([]string{"Cancel"}).
+		SetDoneFunc(func(buttonIndex int, buttonLabel string) {
+			tui.app.SetRoot(tui.mainFlex, true)
+		})
 
+	// Handle Enter key
 	nameInput.SetDoneFunc(func(key tcell.Key) {
 		if key == tcell.KeyEnter {
 			newName := strings.TrimSpace(nameInput.GetText())
@@ -216,8 +219,7 @@ func (tui *TUI) renameSelectedConfig() {
 
 			tui.configs.Configurations[currentIndex].Name = newName
 
-			err := tui.saveConfigsToFile()
-			if err != nil {
+			if err := tui.saveConfigsToFile(); err != nil {
 				tui.updateStatus(fmt.Sprintf("Error saving after rename: %v", err), tcell.ColorRed)
 				tui.app.SetRoot(tui.mainFlex, true)
 				return
@@ -229,13 +231,9 @@ func (tui *TUI) renameSelectedConfig() {
 		}
 	})
 
-	renameModal.SetDoneFunc(func(buttonIndex int, buttonLabel string) {
-		tui.app.SetRoot(tui.mainFlex, true)
-	})
-
 	renameFlex := tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(renameModal, 0, 1, false).
-		AddItem(nameInput, 3, 0, false)
+		AddItem(nameInput, 3, 0, true)
 
 	tui.app.SetRoot(renameFlex, true)
 	tui.app.SetFocus(nameInput)
@@ -251,17 +249,12 @@ func (tui *TUI) loadConfigsFromFile() {
 				Version      string `json:"version"`
 				TotalConfigs int    `json:"total_configs"`
 				LastUpdated  string `json:"last_updated"`
-			}{
-				Version:      "1.0",
-				TotalConfigs: 0,
-				LastUpdated:  time.Now().Format(time.RFC3339),
-			},
+			}{"1.0", 0, time.Now().Format(time.RFC3339)},
 		}
 		return
 	}
 
-	err = json.Unmarshal(data, &tui.configs)
-	if err != nil {
+	if err := json.Unmarshal(data, &tui.configs); err != nil {
 		tui.updateStatus("Error loading configs.json", tcell.ColorRed)
 		tui.configs = ConfigStorage{
 			Configurations: []Config{},
@@ -269,11 +262,7 @@ func (tui *TUI) loadConfigsFromFile() {
 				Version      string `json:"version"`
 				TotalConfigs int    `json:"total_configs"`
 				LastUpdated  string `json:"last_updated"`
-			}{
-				Version:      "1.0",
-				TotalConfigs: 0,
-				LastUpdated:  time.Now().Format(time.RFC3339),
-			},
+			}{"1.0", 0, time.Now().Format(time.RFC3339)},
 		}
 	}
 }
