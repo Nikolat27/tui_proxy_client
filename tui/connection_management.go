@@ -10,9 +10,10 @@ import (
 	"strings"
 	"time"
 
+	"go_v2ray_client/parser"
+
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
-	"go_v2ray_client/parser"
 )
 
 // connectClient is now a high-level wrapper that delegates to helper methods
@@ -164,22 +165,57 @@ func (tui *TUI) connectToConfig() {
 		return
 	}
 
+	// Check if a configuration is actually selected
+	currentIndex := tui.configList.GetCurrentItem()
+	if currentIndex < 0 || currentIndex >= len(tui.configs.Configurations) {
+		tui.updateStatus("Error: Please select a configuration first by clicking on it in the list", tcell.ColorRed)
+		return
+	}
+
 	clientModal := tview.NewModal().
-		SetText(fmt.Sprintf("Choose client for configuration: %s", config.Name)).
+		SetText(fmt.Sprintf("Choose client for configuration: %s (%s)", config.Name, config.Protocol)).
 		AddButtons([]string{"V2Ray", "SingBox", "Cancel"}).
 		SetDoneFunc(func(buttonIndex int, buttonLabel string) {
 			switch buttonLabel {
 			case "V2Ray":
 				tui.connectClient("v2ray", func(link string) (interface{}, error) {
-					return parser.VMessToV2ray(link)
+					return tui.parseForV2Ray(link, config.Protocol)
 				}, []string{"v2ray", "run", "config.json"})
 			case "SingBox":
 				tui.connectClient("singbox", func(link string) (interface{}, error) {
-					return parser.VMessToSingBox(link)
+					return tui.parseForSingBox(link, config.Protocol)
 				}, []string{"sing-box", "run", "-c", "config.json"})
 			}
 			tui.app.SetRoot(tui.mainFlex, true)
 		})
 
 	tui.app.SetRoot(clientModal, true)
+}
+
+// parseForV2Ray parses a proxy link for V2Ray based on protocol
+func (tui *TUI) parseForV2Ray(link, protocol string) (interface{}, error) {
+	switch protocol {
+	case "vmess":
+		return parser.VMessToV2ray(link)
+	case "shadowsocks":
+		return parser.SSToV2ray(link)
+	case "vless":
+		return parser.VLESSToV2Ray(link)
+	default:
+		return nil, fmt.Errorf("unsupported protocol for V2Ray: %s", protocol)
+	}
+}
+
+// parseForSingBox parses a proxy link for sing-box based on protocol
+func (tui *TUI) parseForSingBox(link, protocol string) (interface{}, error) {
+	switch protocol {
+	case "vmess":
+		return parser.VMessToSingBox(link)
+	case "shadowsocks":
+		return parser.SSToSingBox(link)
+	case "vless":
+		return parser.VLESSToSingBox(link)
+	default:
+		return nil, fmt.Errorf("unsupported protocol for sing-box: %s", protocol)
+	}
 }

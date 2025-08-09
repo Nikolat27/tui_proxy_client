@@ -9,8 +9,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gdamore/tcell/v2"
 	"go_v2ray_client/parser"
+
+	"github.com/gdamore/tcell/v2"
 )
 
 // clearUI resets the VMess input and config display
@@ -49,22 +50,36 @@ func (tui *TUI) updateConnectionStatus() {
 	}
 }
 
-// parseVMess converts a VMess link into a SingBox JSON config and displays it
-func (tui *TUI) parseVMess() {
-	vmessLink := strings.TrimSpace(tui.vmessInput.GetText())
-	if vmessLink == "" {
-		tui.updateStatus("Error: Please enter a VMess link", tcell.ColorRed)
+// parseProxyLink converts a proxy link into a SingBox JSON config and displays it
+func (tui *TUI) parseProxyLink() {
+	proxyLink := strings.TrimSpace(tui.vmessInput.GetText())
+	if proxyLink == "" {
+		tui.updateStatus("Error: Please enter a proxy link", tcell.ColorRed)
 		return
 	}
 
-	if !strings.HasPrefix(vmessLink, "vmess://") {
-		tui.updateStatus("Error: Invalid VMess link format. Must start with 'vmess://'", tcell.ColorRed)
+	// Detect protocol and parse accordingly
+	var config interface{}
+	var protocol string
+	var err error
+
+	switch {
+	case strings.HasPrefix(proxyLink, "vmess://"):
+		protocol = "vmess"
+		config, err = parser.VMessToSingBox(proxyLink)
+	case strings.HasPrefix(proxyLink, "ss://"):
+		protocol = "shadowsocks"
+		config, err = parser.SSToSingBox(proxyLink)
+	case strings.HasPrefix(proxyLink, "vless://"):
+		protocol = "vless"
+		config, err = parser.VLESSToSingBox(proxyLink)
+	default:
+		tui.updateStatus("Error: Invalid proxy link format. Must start with 'vmess://', 'ss://', or 'vless://'", tcell.ColorRed)
 		return
 	}
 
-	config, err := parser.VMessToSingBox(vmessLink)
 	if err != nil {
-		tui.updateStatus(fmt.Sprintf("Error parsing VMess: %v", err), tcell.ColorRed)
+		tui.updateStatus(fmt.Sprintf("Error parsing %s: %v", protocol, err), tcell.ColorRed)
 		return
 	}
 
@@ -75,7 +90,7 @@ func (tui *TUI) parseVMess() {
 	}
 
 	tui.configText.SetText(string(configJSON))
-	tui.updateStatus("VMess configuration parsed successfully!", tcell.ColorGreen)
+	tui.updateStatus(fmt.Sprintf("%s configuration parsed successfully!", strings.Title(protocol)), tcell.ColorGreen)
 }
 
 // handlePaste gets clipboard text depending on OS
@@ -122,6 +137,27 @@ func (tui *TUI) runPortCheck(cmdStr string) bool {
 	portOutput := strings.TrimSpace(string(output))
 
 	return len(portOutput) > 0
+}
+
+// copyToClipboard copies text to clipboard depending on OS
+func (tui *TUI) copyToClipboard(text string) {
+	var cmd *exec.Cmd
+	switch runtime.GOOS {
+	case "linux":
+		cmd = exec.Command("xclip", "-i", "-selection", "clipboard")
+	case "darwin":
+		cmd = exec.Command("pbcopy")
+	default:
+		tui.updateStatus("Copy not supported on this system", tcell.ColorYellow)
+		return
+	}
+
+	cmd.Stdin = strings.NewReader(text)
+	if err := cmd.Run(); err != nil {
+		tui.updateStatus(fmt.Sprintf("Copy to clipboard failed: %v", err), tcell.ColorRed)
+	} else {
+		tui.updateStatus("Text copied to clipboard successfully!", tcell.ColorGreen)
+	}
 }
 
 // periodicStatusCheck runs every 10s to update connection status

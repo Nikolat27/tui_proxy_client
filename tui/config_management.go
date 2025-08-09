@@ -3,30 +3,45 @@ package tui
 import (
 	"encoding/json"
 	"fmt"
+	"go_v2ray_client/parser"
 	"os"
 	"strings"
 	"time"
+
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
-	"go_v2ray_client/parser"
 )
 
 // addConfig adds the current configuration to the saved list
 func (tui *TUI) addConfig() {
-	vmessLink := strings.TrimSpace(tui.vmessInput.GetText())
-	if vmessLink == "" {
-		tui.updateStatus("Error: No VMess link to add. Please paste your VMess link first.", tcell.ColorRed)
+	proxyLink := strings.TrimSpace(tui.vmessInput.GetText())
+	if proxyLink == "" {
+		tui.updateStatus("Error: No proxy link to add. Please paste your proxy link first.", tcell.ColorRed)
 		return
 	}
 
-	if !strings.HasPrefix(vmessLink, "vmess://") {
-		tui.updateStatus("Error: Invalid VMess link format. Must start with 'vmess://'", tcell.ColorRed)
+	// Detect protocol and parse accordingly
+	var config interface{}
+	var protocol string
+	var err error
+
+	switch {
+	case strings.HasPrefix(proxyLink, "vmess://"):
+		protocol = "vmess"
+		config, err = parser.VMessToSingBox(proxyLink)
+	case strings.HasPrefix(proxyLink, "ss://"):
+		protocol = "shadowsocks"
+		config, err = parser.SSToSingBox(proxyLink)
+	case strings.HasPrefix(proxyLink, "vless://"):
+		protocol = "vless"
+		config, err = parser.VLESSToSingBox(proxyLink)
+	default:
+		tui.updateStatus("Error: Invalid proxy link format. Must start with 'vmess://', 'ss://', or 'vless://'", tcell.ColorRed)
 		return
 	}
 
-	config, err := parser.VMessToSingBox(vmessLink)
 	if err != nil {
-		tui.updateStatus(fmt.Sprintf("Error parsing VMess: %v", err), tcell.ColorRed)
+		tui.updateStatus(fmt.Sprintf("Error parsing %s: %v", protocol, err), tcell.ColorRed)
 		return
 	}
 
@@ -42,8 +57,8 @@ func (tui *TUI) addConfig() {
 	newConfig := Config{
 		ID:        fmt.Sprintf("%d", len(tui.configs.Configurations)+1),
 		Name:      configName,
-		Protocol:  "vmess",
-		Link:      vmessLink,
+		Protocol:  protocol,
+		Link:      proxyLink,
 		CreatedAt: time.Now().Format(time.RFC3339),
 		LastUsed:  time.Now().Format(time.RFC3339),
 	}
@@ -56,7 +71,7 @@ func (tui *TUI) addConfig() {
 	}
 
 	tui.refreshConfigList()
-	tui.updateStatus(fmt.Sprintf("Configuration '%s' added and saved successfully", configName), tcell.ColorGreen)
+	tui.updateStatus(fmt.Sprintf("Configuration '%s' (%s) added and saved successfully", configName, protocol), tcell.ColorGreen)
 }
 
 // loadConfigList loads existing configurations from storage
@@ -65,7 +80,7 @@ func (tui *TUI) loadConfigList() {
 	tui.refreshConfigList()
 
 	if len(tui.configs.Configurations) == 0 {
-		tui.updateStatus("Ready to add configurations. Use Ctrl+A to add a new VMess configuration.", tcell.ColorBlue)
+		tui.updateStatus("Ready to add configurations. Use Ctrl+A to add a new proxy configuration (VMess/SS/VLESS).", tcell.ColorBlue)
 	} else {
 		tui.updateStatus(fmt.Sprintf("Ready! %d configuration(s) loaded from configs.json", len(tui.configs.Configurations)), tcell.ColorGreen)
 	}
@@ -122,7 +137,20 @@ func (tui *TUI) viewConfig(configIndex int) {
 
 	config := tui.configs.Configurations[configIndex]
 
-	parsedConfig, err := parser.VMessToSingBox(config.Link)
+	// Parse based on the actual protocol
+	var parsedConfig interface{}
+	var err error
+	switch config.Protocol {
+	case "vmess":
+		parsedConfig, err = parser.VMessToSingBox(config.Link)
+	case "shadowsocks":
+		parsedConfig, err = parser.SSToSingBox(config.Link)
+	case "vless":
+		parsedConfig, err = parser.VLESSToSingBox(config.Link)
+	default:
+		tui.updateStatus(fmt.Sprintf("Unsupported protocol: %s", config.Protocol), tcell.ColorRed)
+		return
+	}
 	if err != nil {
 		tui.updateStatus(fmt.Sprintf("Error parsing config: %v", err), tcell.ColorRed)
 		return

@@ -38,7 +38,7 @@ func (tui *TUI) setupKeybindings() {
 			tui.handlePaste()
 			return nil
 		case tcell.KeyEnter:
-			tui.parseVMess()
+			tui.parseProxyLink()
 			return nil
 		default:
 			return event

@@ -2,6 +2,7 @@ package tui
 
 import (
 	"os"
+	"time"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
@@ -55,17 +56,17 @@ func (tui *TUI) createConnectionStatus() *tview.TextView {
 
 func (tui *TUI) createVMessInput() *tview.InputField {
 	input := tview.NewInputField()
-	input.SetLabel("VMess Link: ")
-	input.SetPlaceholder("vmess://...")
+	input.SetLabel("Proxy Link: ")
+	input.SetPlaceholder("vmess://... ss://... vless://...")
 	input.SetFieldWidth(80)
 	input.SetBorder(true)
-	input.SetTitle(" Enter VMess Configuration ")
+	input.SetTitle(" Enter Proxy Configuration (VMess/SS/VLESS) ")
 	return input
 }
 
 func (tui *TUI) createStatusText() *tview.TextView {
 	text := tview.NewTextView()
-	text.SetText("Ready to parse VMess configuration")
+	text.SetText("Ready to parse proxy configuration (VMess/SS/VLESS)")
 	text.SetTextAlign(tview.AlignCenter)
 	text.SetTextColor(tcell.ColorGreen)
 	text.SetBorder(true)
@@ -75,12 +76,37 @@ func (tui *TUI) createStatusText() *tview.TextView {
 
 func (tui *TUI) createConfigText() *tview.TextView {
 	text := tview.NewTextView()
-	text.SetText("Logs will appear here...")
+	text.SetText("Logs will appear here...\n\nTip: Press 'c' to copy all logs to clipboard")
 	text.SetTextAlign(tview.AlignLeft)
 	text.SetTextColor(tcell.ColorWhite)
 	text.SetBorder(true)
-	text.SetTitle(" Logs ")
+	text.SetTitle(" Logs (Press 'c' to copy) ")
 	text.SetScrollable(true)
+	text.SetChangedFunc(func() {
+		text.ScrollToEnd()
+	})
+
+	// Simple copy functionality
+	text.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		if event.Rune() == 'c' || event.Rune() == 'C' {
+			// Copy all text to clipboard
+			fullText := text.GetText(true)
+			if fullText != "" {
+				tui.copyToClipboard(fullText)
+				text.SetTitle(" Logs (Copied! Press 'c' again to copy) ")
+				// Reset title after 2 seconds
+				go func() {
+					time.Sleep(2 * time.Second)
+					tui.app.QueueUpdateDraw(func() {
+						text.SetTitle(" Logs (Press 'c' to copy) ")
+					})
+				}()
+			}
+			return nil
+		}
+		return event
+	})
+
 	return text
 }
 
@@ -191,4 +217,4 @@ func (tui *TUI) createFileExplorer() *tview.Flex {
 		AddItem(tui.pathInput, 3, 0, false).
 		AddItem(tui.fileList, 0, 1, false).
 		AddItem(explorerButtons, 3, 0, false)
-} 
+}
