@@ -35,7 +35,7 @@ func VMessToV2ray(vmessLink string) (map[string]any, error) {
 		"inbounds": []map[string]any{
 			{
 				"tag":      "socks",
-				"port":     1088,
+				"port":     1080,
 				"listen":   "127.0.0.1",
 				"protocol": "socks",
 				"sniffing": map[string]any{

@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bufio"
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -36,19 +38,23 @@ type ConfigStorage struct {
 
 // TUI represents the terminal user interface
 type TUI struct {
-	app          *tview.Application
-	mainFlex     *tview.Flex
-	vmessInput   *tview.InputField
-	statusText   *tview.TextView
-	configText   *tview.TextView
-	buttons      *tview.Flex
-	configList   *tview.List
-	fileDialog   *tview.Modal
-	fileExplorer *tview.Flex
-	fileList     *tview.List
-	pathInput    *tview.InputField
-	currentPath  string
-	configs      ConfigStorage
+	app              *tview.Application
+	mainFlex         *tview.Flex
+	vmessInput       *tview.InputField
+	statusText       *tview.TextView
+	configText       *tview.TextView
+	buttons          *tview.Flex
+	configList       *tview.List
+	fileDialog       *tview.Modal
+	fileExplorer     *tview.Flex
+	fileList         *tview.List
+	pathInput        *tview.InputField
+	currentPath      string
+	configs          ConfigStorage
+	isConnected      bool
+	clientType       string
+	connectedConfig  string
+	connectionStatus *tview.TextView
 }
 
 // NewTUI creates a new TUI instance
@@ -75,6 +81,14 @@ func (tui *TUI) setupUI() {
 		SetTextColor(tcell.ColorYellow).
 		SetDynamicColors(true)
 
+	// Create connection status indicator
+	connectionStatus := tview.NewTextView()
+	connectionStatus.SetText("Status: Not Connected").
+		SetTextAlign(tview.AlignCenter).
+		SetTextColor(tcell.ColorRed).
+		SetBorder(true).
+		SetTitle(" Connection Status ")
+
 	// Create VMess input field
 	tui.vmessInput = tview.NewInputField()
 	tui.vmessInput.SetLabel("VMess Link: ")
@@ -91,13 +105,13 @@ func (tui *TUI) setupUI() {
 	tui.statusText.SetBorder(true)
 	tui.statusText.SetTitle(" Status ")
 
-	// Create config preview area
+	// Create logs display area
 	tui.configText = tview.NewTextView()
-	tui.configText.SetText("Configuration will appear here...")
+	tui.configText.SetText("Logs will appear here...")
 	tui.configText.SetTextAlign(tview.AlignLeft)
 	tui.configText.SetTextColor(tcell.ColorWhite)
 	tui.configText.SetBorder(true)
-	tui.configText.SetTitle(" Generated Configuration ")
+	tui.configText.SetTitle(" Logs ")
 	tui.configText.SetScrollable(true)
 
 	// Create config list
@@ -107,46 +121,59 @@ func (tui *TUI) setupUI() {
 	tui.configList.SetMainTextColor(tcell.ColorWhite)
 	tui.loadConfigList() // Load existing configurations
 
-	// Create buttons with shortcut hints
-	addConfigBtn := tview.NewButton("Add Config (Ctrl+A)").
+	// Create buttons with shortcut hints and text wrapping
+	addConfigBtn := tview.NewButton("Add Config\n(Ctrl+A)").
 		SetSelectedFunc(func() {
 			tui.addConfig()
 		})
 
-	exportBtn := tview.NewButton("Export Config (Ctrl+S)").
+	exportBtn := tview.NewButton("Export Config\n(Ctrl+S)").
 		SetSelectedFunc(func() {
 			tui.exportConfig()
 		})
 
-	deleteBtn := tview.NewButton("Delete Config (Ctrl+D)").
+	connectBtn := tview.NewButton("Connect").
+		SetSelectedFunc(func() {
+			tui.connectToConfig()
+		})
+
+	disconnectBtn := tview.NewButton("Disconnect\n(Ctrl+X)").
+		SetSelectedFunc(func() {
+			tui.disconnect()
+		})
+
+	deleteBtn := tview.NewButton("Delete Config\n(Ctrl+D)").
 		SetSelectedFunc(func() {
 			tui.deleteSelectedConfig()
 		})
 
-	renameBtn := tview.NewButton("Rename Config (Ctrl+R)").
+	renameBtn := tview.NewButton("Rename Config\n(Ctrl+R)").
 		SetSelectedFunc(func() {
 			tui.renameSelectedConfig()
 		})
 
-	refreshBtn := tview.NewButton("Refresh (Ctrl+F)").
+	refreshBtn := tview.NewButton("Refresh\n(Ctrl+F)").
 		SetSelectedFunc(func() {
 			tui.refreshConfigurations()
 		})
 
-	clearBtn := tview.NewButton("Clear (Ctrl+L)").
+	clearBtn := tview.NewButton("Clear\n(Ctrl+L)").
 		SetSelectedFunc(func() {
 			tui.clearUI()
 		})
 
-	quitBtn := tview.NewButton("Quit (Ctrl+C)").
+	quitBtn := tview.NewButton("Quit\n(Ctrl+C)").
 		SetSelectedFunc(func() {
 			tui.app.Stop()
 		})
 
-	// Arrange buttons horizontally
+	// Arrange buttons horizontally with minimal spacing and equal widths
+	// Use minimal spacing (0) and let the Flex layout handle equal distribution
 	tui.buttons = tview.NewFlex().
 		AddItem(addConfigBtn, 0, 1, false).
 		AddItem(exportBtn, 0, 1, false).
+		AddItem(connectBtn, 0, 1, false).
+		AddItem(disconnectBtn, 0, 1, false).
 		AddItem(deleteBtn, 0, 1, false).
 		AddItem(renameBtn, 0, 1, false).
 		AddItem(refreshBtn, 0, 1, false).
@@ -160,10 +187,14 @@ func (tui *TUI) setupUI() {
 
 	tui.mainFlex = tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(title, 3, 0, false).
+		AddItem(connectionStatus, 3, 0, false).
 		AddItem(tui.vmessInput, 3, 0, false).
 		AddItem(tui.statusText, 3, 0, false).
 		AddItem(configSection, 0, 1, false).
 		AddItem(tui.buttons, 3, 0, false)
+
+	// Store connection status reference for updates
+	tui.connectionStatus = connectionStatus
 
 	// Initialize file dialog
 	tui.fileDialog = tview.NewModal().
@@ -189,14 +220,19 @@ func (tui *TUI) setupUI() {
 	tui.fileList.SetBorder(true)
 	tui.fileList.SetTitle(" Files and Folders ")
 
-	// Create file explorer layout
+	// Create file explorer layout with minimal spacing and equal widths
+	exportHereBtn := tview.NewButton("Export Here").SetSelectedFunc(func() {
+		tui.exportToCurrentPath()
+	})
+
+	backToMainBtn := tview.NewButton("Back to Main").SetSelectedFunc(func() {
+		tui.app.SetRoot(tui.mainFlex, true)
+	})
+
+	// Arrange file explorer buttons horizontally with equal widths
 	explorerButtons := tview.NewFlex().
-		AddItem(tview.NewButton("Export Here").SetSelectedFunc(func() {
-			tui.exportToCurrentPath()
-		}), 0, 1, false).
-		AddItem(tview.NewButton("Back to Main").SetSelectedFunc(func() {
-			tui.app.SetRoot(tui.mainFlex, true)
-		}), 0, 1, false)
+		AddItem(exportHereBtn, 0, 1, false).
+		AddItem(backToMainBtn, 0, 1, false)
 
 	tui.fileExplorer = tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(tui.pathInput, 3, 0, false).
@@ -207,6 +243,9 @@ func (tui *TUI) setupUI() {
 	tui.loadDirectory(tui.currentPath)
 
 	tui.app.SetRoot(tui.mainFlex, true)
+
+	// Start periodic connection status check
+	go tui.periodicStatusCheck()
 }
 
 // setupKeybindings sets up keyboard shortcuts
@@ -219,6 +258,7 @@ func (tui *TUI) setupKeybindings() {
 		case tcell.KeyCtrlS:
 			tui.exportConfig()
 			return nil
+
 		case tcell.KeyCtrlD:
 			tui.deleteSelectedConfig()
 			return nil
@@ -231,6 +271,11 @@ func (tui *TUI) setupKeybindings() {
 		case tcell.KeyCtrlL:
 			tui.clearUI()
 			return nil
+
+		case tcell.KeyCtrlX:
+			tui.disconnect()
+			return nil
+
 		case tcell.KeyCtrlC:
 			tui.app.Stop()
 			return nil
@@ -419,8 +464,35 @@ func (tui *TUI) clearUI() {
 
 // updateStatus updates the status text with a message and color
 func (tui *TUI) updateStatus(message string, color tcell.Color) {
-	tui.statusText.SetText(message)
+	// Add connection status to the message if connected
+	if tui.isConnected {
+		statusMessage := fmt.Sprintf("%s | Connected: %s (%s)", message, tui.connectedConfig, tui.clientType)
+		tui.statusText.SetText(statusMessage)
+	} else {
+		tui.statusText.SetText(message)
+	}
 	tui.statusText.SetTextColor(color)
+}
+
+// updateConnectionStatus updates the connection status display
+func (tui *TUI) updateConnectionStatus() {
+	// Check if port 1080 is actually in use to verify connection status
+	portInUse := tui.isPort1080InUse()
+
+	if tui.isConnected && portInUse {
+		tui.connectionStatus.SetText(fmt.Sprintf("Status: Connected to %s (%s) - Port 1080 Active", tui.connectedConfig, tui.clientType))
+		tui.connectionStatus.SetTextColor(tcell.ColorGreen)
+	} else if tui.isConnected && !portInUse {
+		// Connection state says connected but port is not in use - reset state
+		tui.isConnected = false
+		tui.clientType = ""
+		tui.connectedConfig = ""
+		tui.connectionStatus.SetText("Status: Not Connected (Port 1080 Free)")
+		tui.connectionStatus.SetTextColor(tcell.ColorRed)
+	} else {
+		tui.connectionStatus.SetText("Status: Not Connected (Port 1080 Free)")
+		tui.connectionStatus.SetTextColor(tcell.ColorRed)
+	}
 }
 
 // handlePaste handles paste operations by reading from clipboard
@@ -456,14 +528,14 @@ func (tui *TUI) handlePaste() {
 func (tui *TUI) addConfig() {
 	vmessLink := tui.vmessInput.GetText()
 	if vmessLink == "" {
-		tui.updateStatus("Error: No VMess link to add", tcell.ColorRed)
+		tui.updateStatus("Error: No VMess link to add. Please paste your VMess link in the input field above first.", tcell.ColorRed)
 		return
 	}
 
 	// Trim whitespace
 	vmessLink = strings.TrimSpace(vmessLink)
 	if vmessLink == "" {
-		tui.updateStatus("Error: No VMess link to add", tcell.ColorRed)
+		tui.updateStatus("Error: No VMess link to add. Please paste your VMess link in the input field above first.", tcell.ColorRed)
 		return
 	}
 
@@ -582,6 +654,317 @@ func (tui *TUI) refreshConfigurations() {
 	}
 }
 
+// connectV2Ray connects using V2Ray with the selected configuration
+func (tui *TUI) connectV2Ray() {
+	// Get the currently selected configuration
+	currentIndex := tui.configList.GetCurrentItem()
+
+	if len(tui.configs.Configurations) == 0 {
+		tui.updateStatus("Error: No configurations to connect. Please add a configuration first.", tcell.ColorRed)
+		return
+	}
+
+	if currentIndex < 0 || currentIndex >= len(tui.configs.Configurations) {
+		tui.updateStatus("Error: Please select a configuration to connect.", tcell.ColorYellow)
+		return
+	}
+
+	config := tui.configs.Configurations[currentIndex]
+	vmessLink := config.Link
+
+	// Parse the VMess link to V2Ray config
+	v2rayConfig, err := VMessToV2ray(vmessLink)
+	if err != nil {
+		tui.updateStatus(fmt.Sprintf("Error parsing VMess: %v", err), tcell.ColorRed)
+		return
+	}
+
+	// Convert config to JSON string
+	configJSON, err := json.MarshalIndent(v2rayConfig, "", "  ")
+	if err != nil {
+		tui.updateStatus(fmt.Sprintf("Error marshaling config: %v", err), tcell.ColorRed)
+		return
+	}
+
+	// Save config to config.json for V2Ray
+	err = os.WriteFile("config.json", configJSON, 0644)
+	if err != nil {
+		tui.updateStatus(fmt.Sprintf("Error saving config: %v", err), tcell.ColorRed)
+		return
+	}
+
+	// Update last used timestamp
+	tui.configs.Configurations[currentIndex].LastUsed = time.Now().Format(time.RFC3339)
+	tui.saveConfigsToFile()
+
+	// Try to run V2Ray
+	tui.updateStatus(fmt.Sprintf("Starting V2Ray with configuration: %s...", config.Name), tcell.ColorBlue)
+	tui.configText.SetText("Starting V2Ray...\n")
+
+	// Run V2Ray in background
+	go func() {
+		cmd := exec.Command("v2ray", "run", "config.json")
+
+		// Capture stdout and stderr separately for real-time logging
+		stdout, err := cmd.StdoutPipe()
+		if err != nil {
+			tui.app.QueueUpdateDraw(func() {
+				tui.configText.SetText(fmt.Sprintf("Error creating stdout pipe: %v", err))
+			})
+			return
+		}
+
+		stderr, err := cmd.StderrPipe()
+		if err != nil {
+			tui.app.QueueUpdateDraw(func() {
+				tui.configText.SetText(fmt.Sprintf("Error creating stderr pipe: %v", err))
+			})
+			return
+		}
+
+		// Start the command
+		if err := cmd.Start(); err != nil {
+			tui.app.QueueUpdateDraw(func() {
+				tui.configText.SetText(fmt.Sprintf("Error starting V2Ray: %v", err))
+				tui.updateStatus(fmt.Sprintf("V2Ray error: %v", err), tcell.ColorRed)
+			})
+			return
+		}
+
+		// Update connection status immediately after successful start
+		tui.app.QueueUpdateDraw(func() {
+			tui.isConnected = true
+			tui.clientType = "v2ray"
+			tui.connectedConfig = config.Name
+			tui.updateStatus(fmt.Sprintf("V2Ray started successfully with config: %s! Check your proxy settings (127.0.0.1:1080)", config.Name), tcell.ColorGreen)
+			tui.updateConnectionStatus()
+		})
+
+		// Read stdout in real-time
+		go func() {
+			scanner := bufio.NewScanner(stdout)
+			for scanner.Scan() {
+				line := scanner.Text()
+				tui.app.QueueUpdateDraw(func() {
+					currentText := tui.configText.GetText(true)
+					if len(currentText) > 10000 { // Limit log size
+						lines := strings.Split(currentText, "\n")
+						if len(lines) > 100 {
+							currentText = strings.Join(lines[len(lines)-100:], "\n")
+						}
+					}
+					tui.configText.SetText(currentText + "\n" + line)
+					tui.configText.ScrollToEnd()
+				})
+			}
+		}()
+
+		// Read stderr in real-time
+		go func() {
+			scanner := bufio.NewScanner(stderr)
+			for scanner.Scan() {
+				line := scanner.Text()
+				tui.app.QueueUpdateDraw(func() {
+					currentText := tui.configText.GetText(true)
+					if len(currentText) > 10000 { // Limit log size
+						lines := strings.Split(currentText, "\n")
+						if len(lines) > 100 {
+							currentText = strings.Join(lines[len(lines)-100:], "\n")
+						}
+					}
+					tui.configText.SetText(currentText + "\n" + "[ERROR] " + line)
+					tui.configText.ScrollToEnd()
+				})
+			}
+		}()
+
+		// Wait for command to complete
+		if err := cmd.Wait(); err != nil {
+			tui.app.QueueUpdateDraw(func() {
+				tui.isConnected = false
+				tui.clientType = ""
+				tui.connectedConfig = ""
+				tui.updateStatus(fmt.Sprintf("V2Ray stopped with error: %v", err), tcell.ColorRed)
+				tui.updateConnectionStatus()
+			})
+		}
+	}()
+}
+
+// connectSingBox connects using sing-box with the selected configuration
+func (tui *TUI) connectSingBox() {
+	// Get the currently selected configuration
+	currentIndex := tui.configList.GetCurrentItem()
+
+	if len(tui.configs.Configurations) == 0 {
+		tui.updateStatus("Error: No configurations to connect. Please add a configuration first.", tcell.ColorRed)
+		return
+	}
+
+	if currentIndex < 0 || currentIndex >= len(tui.configs.Configurations) {
+		tui.updateStatus("Error: Please select a configuration to connect.", tcell.ColorYellow)
+		return
+	}
+
+	config := tui.configs.Configurations[currentIndex]
+	vmessLink := config.Link
+
+	// Parse the VMess link to sing-box config
+	singboxConfig, err := VMessToSingBox(vmessLink)
+	if err != nil {
+		tui.updateStatus(fmt.Sprintf("Error parsing VMess: %v", err), tcell.ColorRed)
+		return
+	}
+
+	// Convert config to JSON string
+	configJSON, err := json.MarshalIndent(singboxConfig, "", "  ")
+	if err != nil {
+		tui.updateStatus(fmt.Sprintf("Error marshaling config: %v", err), tcell.ColorRed)
+		return
+	}
+
+	// Save config to config.json for sing-box
+	err = os.WriteFile("config.json", configJSON, 0644)
+	if err != nil {
+		tui.updateStatus(fmt.Sprintf("Error saving config: %v", err), tcell.ColorRed)
+		return
+	}
+
+	// Update last used timestamp
+	tui.configs.Configurations[currentIndex].LastUsed = time.Now().Format(time.RFC3339)
+	tui.saveConfigsToFile()
+
+	// Try to run sing-box
+	tui.updateStatus(fmt.Sprintf("Starting sing-box with configuration: %s...", config.Name), tcell.ColorBlue)
+	tui.configText.SetText("Starting sing-box...\n")
+
+	// Run sing-box in background
+	go func() {
+		cmd := exec.Command("sing-box", "run", "-c", "config.json")
+
+		// Capture stdout and stderr separately for real-time logging
+		stdout, err := cmd.StdoutPipe()
+		if err != nil {
+			tui.app.QueueUpdateDraw(func() {
+				tui.configText.SetText(fmt.Sprintf("Error creating stdout pipe: %v", err))
+			})
+			return
+		}
+
+		stderr, err := cmd.StderrPipe()
+		if err != nil {
+			tui.app.QueueUpdateDraw(func() {
+				tui.configText.SetText(fmt.Sprintf("Error creating stderr pipe: %v", err))
+			})
+			return
+		}
+
+		// Start the command
+		if err := cmd.Start(); err != nil {
+			tui.app.QueueUpdateDraw(func() {
+				tui.configText.SetText(fmt.Sprintf("Error starting sing-box: %v", err))
+				tui.updateStatus(fmt.Sprintf("sing-box error: %v", err), tcell.ColorRed)
+			})
+			return
+		}
+
+		// Update connection status immediately after successful start
+		tui.app.QueueUpdateDraw(func() {
+			tui.isConnected = true
+			tui.clientType = "singbox"
+			tui.connectedConfig = config.Name
+			tui.updateStatus(fmt.Sprintf("sing-box started successfully with config: %s! Check your proxy settings (127.0.0.1:1080)", config.Name), tcell.ColorGreen)
+			tui.updateConnectionStatus()
+		})
+
+		// Read stdout in real-time
+		go func() {
+			scanner := bufio.NewScanner(stdout)
+			for scanner.Scan() {
+				line := scanner.Text()
+				tui.app.QueueUpdateDraw(func() {
+					currentText := tui.configText.GetText(true)
+					if len(currentText) > 10000 { // Limit log size
+						lines := strings.Split(currentText, "\n")
+						if len(lines) > 100 {
+							currentText = strings.Join(lines[len(lines)-100:], "\n")
+						}
+					}
+					tui.configText.SetText(currentText + "\n" + line)
+					tui.configText.ScrollToEnd()
+				})
+			}
+		}()
+
+		// Read stderr in real-time
+		go func() {
+			scanner := bufio.NewScanner(stderr)
+			for scanner.Scan() {
+				line := scanner.Text()
+				tui.app.QueueUpdateDraw(func() {
+					currentText := tui.configText.GetText(true)
+					if len(currentText) > 10000 { // Limit log size
+						lines := strings.Split(currentText, "\n")
+						if len(lines) > 100 {
+							currentText = strings.Join(lines[len(lines)-100:], "\n")
+						}
+					}
+					tui.configText.SetText(currentText + "\n" + "[ERROR] " + line)
+					tui.configText.ScrollToEnd()
+				})
+			}
+		}()
+
+		// Wait for command to complete
+		if err := cmd.Wait(); err != nil {
+			tui.app.QueueUpdateDraw(func() {
+				tui.isConnected = false
+				tui.clientType = ""
+				tui.connectedConfig = ""
+				tui.updateStatus(fmt.Sprintf("sing-box stopped with error: %v", err), tcell.ColorRed)
+				tui.updateConnectionStatus()
+			})
+		}
+	}()
+}
+
+// connectToConfig shows a client selection modal and connects to the selected configuration
+func (tui *TUI) connectToConfig() {
+	// Get the currently selected configuration
+	currentIndex := tui.configList.GetCurrentItem()
+
+	if len(tui.configs.Configurations) == 0 {
+		tui.updateStatus("Error: No configurations to connect. Please add a configuration first.", tcell.ColorRed)
+		return
+	}
+
+	if currentIndex < 0 || currentIndex >= len(tui.configs.Configurations) {
+		tui.updateStatus("Error: Please select a configuration to connect.", tcell.ColorYellow)
+		return
+	}
+
+	config := tui.configs.Configurations[currentIndex]
+
+	// Create client selection modal
+	clientModal := tview.NewModal().
+		SetText(fmt.Sprintf("Choose client for configuration: %s", config.Name)).
+		AddButtons([]string{"V2Ray", "SingBox", "Cancel"}).
+		SetDoneFunc(func(buttonIndex int, buttonLabel string) {
+			switch buttonLabel {
+			case "V2Ray":
+				tui.connectV2Ray()
+			case "SingBox":
+				tui.connectSingBox()
+			case "Cancel":
+				// Do nothing, just return to main interface
+			}
+			tui.app.SetRoot(tui.mainFlex, true)
+		})
+
+	// Show the client selection modal
+	tui.app.SetRoot(clientModal, true)
+}
+
 // viewConfig displays the details of a selected configuration
 func (tui *TUI) viewConfig(configIndex int) {
 	if configIndex < 0 || configIndex >= len(tui.configs.Configurations) {
@@ -598,21 +981,22 @@ func (tui *TUI) viewConfig(configIndex int) {
 		return
 	}
 
-	// Convert config to JSON string
+	// Convert config to JSON string for display
 	configJSON, err := json.MarshalIndent(parsedConfig, "", "  ")
 	if err != nil {
 		tui.updateStatus(fmt.Sprintf("Error marshaling config: %v", err), tcell.ColorRed)
 		return
 	}
 
-	// Display the configuration
-	tui.configText.SetText(string(configJSON))
+	// Display the parsed configuration in the config text area
+	tui.configText.SetText(fmt.Sprintf("Configuration: %s\nProtocol: %s\nLink: %s\nCreated: %s\nLast Used: %s\n\nParsed Configuration:\n%s\n\nReady to connect - click Connect button to start",
+		config.Name, config.Protocol, config.Link, config.CreatedAt[:10], config.LastUsed[:10], string(configJSON)))
 
 	// Update the VMess input field to show the selected config
 	tui.vmessInput.SetText(config.Link)
 
 	// Update status
-	tui.updateStatus(fmt.Sprintf("Viewing configuration: %s", config.Name), tcell.ColorBlue)
+	tui.updateStatus(fmt.Sprintf("Selected configuration: %s (Ready to connect)", config.Name), tcell.ColorBlue)
 
 	// Update last used timestamp
 	tui.configs.Configurations[configIndex].LastUsed = time.Now().Format(time.RFC3339)
@@ -779,6 +1163,340 @@ func (tui *TUI) saveConfigsToFile() error {
 	}
 
 	return os.WriteFile("configs.json", data, 0644)
+}
+
+// isPort1080InUse checks if port 1080 is currently being used
+func (tui *TUI) isPort1080InUse() bool {
+	// Try using netstat first (usually doesn't require privileges)
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	cmd := exec.CommandContext(ctx, "sh", "-c", "netstat -tlnp 2>/dev/null | grep :1080")
+	output, err := cmd.Output()
+	cancel()
+	if err == nil && len(strings.TrimSpace(string(output))) > 0 {
+		return true
+	}
+
+	// Fallback to lsof if netstat fails
+	altCtx, altCancel := context.WithTimeout(context.Background(), 3*time.Second)
+	cmd = exec.CommandContext(altCtx, "sh", "-c", "lsof -ti:1080 2>/dev/null")
+	output, err = cmd.Output()
+	altCancel()
+	if err != nil {
+		return false
+	}
+	return len(strings.TrimSpace(string(output))) > 0
+}
+
+// periodicStatusCheck periodically checks the connection status and updates the UI
+func (tui *TUI) periodicStatusCheck() {
+	ticker := time.NewTicker(10 * time.Second) // Check every 10 seconds to reduce system load
+	defer ticker.Stop()
+
+	// Add a context with timeout to prevent infinite running
+	ctx, cancel := context.WithTimeout(context.Background(), 24*time.Hour) // Run for max 24 hours
+	defer cancel()
+
+	for {
+		select {
+		case <-ticker.C:
+			// Check if app is still running before updating
+			if tui.app != nil {
+				tui.app.QueueUpdateDraw(func() {
+					if tui.connectionStatus != nil {
+						tui.updateConnectionStatus()
+					}
+				})
+			}
+		case <-ctx.Done():
+			return // Exit when context is cancelled
+		}
+	}
+}
+
+// disconnect stops the current connection and kills processes on port 1080
+func (tui *TUI) disconnect() {
+	// Create a context with timeout for the entire disconnect operation
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	// Show current port status in logs
+	tui.app.QueueUpdateDraw(func() {
+		tui.configText.SetText("Checking port 1080 status...\n")
+	})
+
+	// Check if port 1080 is actually in use
+	if !tui.isPort1080InUse() {
+		tui.app.QueueUpdateDraw(func() {
+			tui.updateStatus("Port 1080 is not in use - nothing to disconnect", tcell.ColorYellow)
+			tui.configText.SetText("Port 1080 is not in use.\nNo active connections found.\n")
+			// Reset connection state if port is not in use
+
+			if !tui.isConnected {
+				return
+			}
+
+			tui.isConnected = false
+			tui.clientType = ""
+			tui.connectedConfig = ""
+			tui.updateConnectionStatus()
+
+		})
+		return
+	}
+
+	// Add a note about the disconnection process
+	tui.app.QueueUpdateDraw(func() {
+		tui.configText.SetText(tui.configText.GetText(true) + "\nAttempting to disconnect using safe methods.\n" +
+			"This will try to kill processes owned by your user account.\n")
+	})
+
+	// Show what processes are using port 1080
+	tui.app.QueueUpdateDraw(func() {
+		tui.configText.SetText(tui.configText.GetText(true) + "\nGetting process details...\n")
+	})
+
+	// Get process information with context
+	processInfo := tui.getProcessInfo(ctx)
+	if processInfo != "" {
+		tui.app.QueueUpdateDraw(func() {
+			tui.configText.SetText(tui.configText.GetText(true) + "\nProcesses using port 1080:\n" + processInfo + "\n")
+		})
+	} else {
+		tui.app.QueueUpdateDraw(func() {
+			tui.configText.SetText(tui.configText.GetText(true) + "\nNo process details available for port 1080.\n")
+		})
+	}
+
+	if !tui.isConnected {
+		tui.app.QueueUpdateDraw(func() {
+			tui.updateStatus("No active connection to disconnect", tcell.ColorYellow)
+		})
+		return
+	}
+
+	// Try to stop the running process by name first
+	tui.app.QueueUpdateDraw(func() {
+		tui.configText.SetText(tui.configText.GetText(true) + "\nAttempting to kill processes by name...\n")
+	})
+
+	// Kill processes by name without requiring privileges
+	if tui.killProcessesByName(ctx) {
+		tui.app.QueueUpdateDraw(func() {
+			tui.configText.SetText(tui.configText.GetText(true) + "\nProcess name kill attempt completed.\n")
+		})
+	}
+
+	// Now try to kill processes on port 1080 using safer methods
+	tui.app.QueueUpdateDraw(func() {
+		tui.configText.SetText(tui.configText.GetText(true) + "\nAttempting to kill processes on port 1080...\n")
+	})
+
+	// Method 1: Try to get PIDs and kill them individually (much safer)
+	pids := tui.getPIDsOnPort1080()
+	if len(pids) > 0 {
+		tui.app.QueueUpdateDraw(func() {
+			tui.configText.SetText(tui.configText.GetText(true) + fmt.Sprintf("\nFound %d process(es) on port 1080. Attempting to kill...\n", len(pids)))
+		})
+
+		success := tui.killProcessesByPID(ctx, pids)
+		if success {
+			clientType := tui.clientType
+			tui.app.QueueUpdateDraw(func() {
+				tui.isConnected = false
+				tui.clientType = ""
+				tui.connectedConfig = ""
+				tui.updateStatus(fmt.Sprintf("Disconnected from %s successfully (port 1080 freed)", clientType), tcell.ColorGreen)
+				tui.updateConnectionStatus()
+				tui.configText.SetText(tui.configText.GetText(true) + "\nDisconnection successful! Port 1080 has been freed.\n")
+			})
+			return
+		}
+	}
+
+	// Method 2: Try with sudo only if no password is required
+	tui.app.QueueUpdateDraw(func() {
+		tui.updateStatus("Non-privileged methods failed, trying with sudo (no password)...", tcell.ColorYellow)
+		tui.configText.SetText(tui.configText.GetText(true) + "\nNon-privileged methods failed.\nAttempting with sudo (no password required)...\n")
+	})
+
+	// Try sudo approach only if no password is needed
+	if tui.trySudoKillNoPassword(ctx) {
+		clientType := tui.clientType
+		tui.app.QueueUpdateDraw(func() {
+			tui.isConnected = false
+			tui.clientType = ""
+			tui.connectedConfig = ""
+			tui.updateStatus(fmt.Sprintf("Disconnected from %s successfully (port 1080 freed)", clientType), tcell.ColorGreen)
+			tui.updateConnectionStatus()
+			tui.configText.SetText(tui.configText.GetText(true) + "\nDisconnection successful with sudo! Port 1080 has been freed.\n")
+		})
+		return
+	}
+
+	// If all methods fail, show instructions for manual cleanup
+	tui.app.QueueUpdateDraw(func() {
+		tui.updateStatus("All automatic methods failed - showing manual instructions", tcell.ColorRed)
+		tui.configText.SetText(tui.configText.GetText(true) + "\nAll automatic disconnection methods failed.\n\n" +
+			"Manual commands to try:\n" +
+			"1. kill -9 $(lsof -ti:1080)\n" +
+			"2. sudo lsof -ti:1080 | xargs sudo kill -9\n" +
+			"3. Restart your system\n")
+	})
+
+	// Final status update
+	tui.app.QueueUpdateDraw(func() {
+		tui.updateStatus("Disconnect operation completed - check logs above for details", tcell.ColorYellow)
+	})
+}
+
+// getProcessInfo gets process information for port 1080 with context
+func (tui *TUI) getProcessInfo(ctx context.Context) string {
+	// Try netstat first
+	cmd := exec.CommandContext(ctx, "netstat", "-tlnp")
+	output, err := cmd.Output()
+	if err == nil {
+		lines := strings.Split(string(output), "\n")
+		for _, line := range lines {
+			if strings.Contains(line, ":1080") {
+				return line
+			}
+		}
+	}
+
+	// Fallback to lsof
+	altCmd := exec.CommandContext(ctx, "lsof", "-i:1080")
+	output, err = altCmd.Output()
+	if err == nil {
+		return string(output)
+	}
+
+	return ""
+}
+
+// killProcessesByName kills processes by name without requiring privileges
+func (tui *TUI) killProcessesByName(ctx context.Context) bool {
+	var killCmd *exec.Cmd
+	switch tui.clientType {
+	case "v2ray":
+		killCmd = exec.CommandContext(ctx, "pkill", "-f", "v2ray")
+	case "singbox":
+		killCmd = exec.CommandContext(ctx, "pkill", "-f", "sing-box")
+	default:
+		// If unknown client type, try both
+		killCmd = exec.CommandContext(ctx, "sh", "-c", "pkill -f v2ray; pkill -f sing-box")
+	}
+
+	if killCmd != nil {
+		// Run pkill with timeout and ignore errors
+		killCmd.CombinedOutput()
+		return true
+	}
+	return false
+}
+
+// killProcessesByPID safely kills processes by their PIDs with context
+func (tui *TUI) killProcessesByPID(ctx context.Context, pids []string) bool {
+	successCount := 0
+
+	for _, pid := range pids {
+		pid = strings.TrimSpace(pid)
+		if pid == "" {
+			continue
+		}
+
+		// Try to kill the process with context
+		killCmd := exec.CommandContext(ctx, "kill", pid)
+		err := killCmd.Run()
+
+		if err == nil {
+			successCount++
+			tui.app.QueueUpdateDraw(func() {
+				tui.configText.SetText(tui.configText.GetText(true) + fmt.Sprintf("\nSuccessfully killed process %s\n", pid))
+			})
+		} else {
+			tui.app.QueueUpdateDraw(func() {
+				tui.configText.SetText(tui.configText.GetText(true) + fmt.Sprintf("\nFailed to kill process %s: %v\n", pid, err))
+			})
+		}
+	}
+
+	// Wait a moment for processes to terminate
+	time.Sleep(1 * time.Second)
+
+	// Check if port 1080 is now free
+	return !tui.isPort1080InUse()
+}
+
+// trySudoKillNoPassword attempts to kill processes on port 1080 using sudo only if no password is required
+func (tui *TUI) trySudoKillNoPassword(ctx context.Context) bool {
+	// First check if sudo is available
+	checkCmd := exec.CommandContext(ctx, "which", "sudo")
+	_, err := checkCmd.Output()
+	if err != nil {
+		return false // sudo not available
+	}
+
+	// Check if we can run sudo without password (NOPASSWD in sudoers)
+	sudoTestCmd := exec.CommandContext(ctx, "sudo", "-n", "true")
+	err = sudoTestCmd.Run()
+	if err != nil {
+		return false // Cannot run sudo without password
+	}
+
+	// Can run sudo without password, proceed with kill command
+	sudoCmd := exec.CommandContext(ctx, "sudo", "sh", "-c", "lsof -ti:1080 2>/dev/null | xargs -r kill -9")
+	err = sudoCmd.Run()
+	return err == nil
+}
+
+// getPIDsOnPort1080 safely gets PIDs of processes using port 1080
+func (tui *TUI) getPIDsOnPort1080() []string {
+	var pids []string
+
+	// Try netstat first
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	cmd := exec.CommandContext(ctx, "netstat", "-tlnp")
+	output, err := cmd.Output()
+	cancel()
+
+	if err == nil {
+		lines := strings.Split(string(output), "\n")
+		for _, line := range lines {
+			if strings.Contains(line, ":1080") {
+				// Parse the line to extract PID
+				parts := strings.Fields(line)
+				if len(parts) >= 7 {
+					pidPart := parts[6]
+					if strings.Contains(pidPart, "/") {
+						pid := strings.Split(pidPart, "/")[0]
+						if pid != "-" && pid != "" {
+							pids = append(pids, pid)
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// If netstat failed or no PIDs found, try lsof
+	if len(pids) == 0 {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		cmd = exec.CommandContext(ctx, "lsof", "-ti:1080")
+		output, err = cmd.Output()
+		cancel()
+
+		if err == nil {
+			lines := strings.Split(strings.TrimSpace(string(output)), "\n")
+			for _, line := range lines {
+				line = strings.TrimSpace(line)
+				if line != "" {
+					pids = append(pids, line)
+				}
+			}
+		}
+	}
+
+	return pids
 }
 
 // Run starts the TUI application
