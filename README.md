@@ -4,7 +4,10 @@ A terminal-based user interface (TUI) application for managing V2Ray and sing-bo
 
 ## Features
 
-- Parse and validate VMess links
+- Parse and validate multiple proxy protocols:
+  - **VMess** (`vmess://`) - Advanced proxy protocol with multiple transport options
+  - **Shadowsocks** (`ss://`) - Fast and lightweight proxy protocol
+  - **VLESS** (`vless://`) - Lightweight proxy protocol with TLS support
 - Save and manage multiple configurations
 - Connect using V2Ray or sing-box clients
 - Export configurations to JSON files
@@ -54,7 +57,7 @@ The application has been refactored into a modular structure for better maintain
 
 ### Basic Workflow
 
-1. **Add Configuration**: Paste a VMess link and press `Ctrl+A`
+1. **Add Configuration**: Paste a proxy link (VMess/SS/VLESS) and press `Ctrl+A`
 2. **View Configuration**: Select a configuration from the list to view details
 3. **Connect**: Select a configuration and click "Connect" to choose between V2Ray or sing-box
 4. **Export**: Use `Ctrl+S` to export configurations to JSON files
@@ -89,6 +92,25 @@ Configurations are stored in `configs.json` in the application directory. The fi
 
 - Configuration details (ID, name, protocol, link, timestamps)
 - Metadata (version, total count, last updated)
+
+## Supported Protocols
+
+The application supports three main proxy protocols:
+
+### VMess (`vmess://`)
+- Advanced proxy protocol with multiple transport options
+- Supports WebSocket, HTTP/2, TCP, and other transport methods
+- Built-in TLS support with fingerprint spoofing
+
+### Shadowsocks (`ss://`)
+- Fast and lightweight proxy protocol
+- Multiple encryption methods (AES-256-GCM, ChaCha20-Poly1305, etc.)
+- Simple and efficient for most use cases
+
+### VLESS (`vless://`)
+- Lightweight proxy protocol with minimal overhead
+- Built-in TLS support
+- Multiple transport options (WebSocket, gRPC, HTTP/2, etc.)
 
 ## Connection Management
 

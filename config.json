@@ -13,27 +13,12 @@
   },
   "outbounds": [
     {
-      "security": "auto",
-      "server": "104.21.30.224",
-      "server_port": 443,
+      "method": "2022-blake3-aes-256-gcm",
+      "password": "tq0tMBTuBWKyIc+22BQCMMo8J2hxvSqRAX6eoBlIVSU=:ifC08xk0D/SPij0mZmfWtmqdQFXG9cxwHqfVQCZuPRk=",
+      "server": "89.44.242.222",
+      "server_port": 20379,
       "tag": "proxy",
-      "tls": {
-        "enabled": true,
-        "server_name": "server-b.tabatelecom.dev",
-        "utls": {
-          "enabled": true,
-          "fingerprint": ""
-        }
-      },
-      "transport": {
-        "headers": {
-          "Host": "server-b.tabatelecom.dev"
-        },
-        "path": "/",
-        "type": "ws"
-      },
-      "type": "vmess",
-      "uuid": "a6f8c3a1-69a4-4c7e-8ad6-1b7a2d7f9b4c"
+      "type": "shadowsocks"
     },
     {
       "tag": "direct",

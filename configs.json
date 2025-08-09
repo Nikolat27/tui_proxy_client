@@ -2,16 +2,16 @@
   "configurations": [
     {
       "id": "1",
-      "name": "Config 1meow",
-      "protocol": "vmess",
-      "link": "vmess://ewogICJ2IjogIjIiLAogICJwcyI6ICJTZXJ2ZXIgQiIsCiAgImFkZCI6ICIxMDQuMjEuMzAuMjI0IiwKICAicG9ydCI6ICI0NDMiLAogICJpZCI6ICJhNmY4YzNhMS02OWE0LTRjN2UtOGFkNi0xYjdhMmQ3ZjliNGMiLAogICJhaWQiOiAiMCIsCiAgInNjeSI6ICJhdXRvIiwKICAibmV0IjogIndzIiwKICAidHlwZSI6ICJub25lIiwKICAiaG9zdCI6ICJzZXJ2ZXItYi50YWJhdGVsZWNvbS5kZXYiLAogICJwYXRoIjogIi8iLAogICJ0bHMiOiAidGxzIiwKICAic25pIjogIiIsCiAgImFscG4iOiAiIiwKICAiZnAiOiAiIgp9",
-      "created_at": "2025-08-09T17:04:15+03:30",
-      "last_used": "2025-08-09T19:18:33+03:30"
+      "name": "Config 1",
+      "protocol": "shadowsocks",
+      "link": "ss://MjAyMi1ibGFrZTMtYWVzLTI1Ni1nY206dHEwdE1CVHVCV0t5SWMrMjJCUUNNTW84SjJoeHZTcVJBWDZlb0JsSVZTVT06aWZDMDh4azBEL1NQaWowbVptZld0bXFkUUZYRzljeHdIcWZWUUNadVBSaz0%3D@89.44.242.222:20379#%40InvoProxy",
+      "created_at": "2025-08-09T20:31:44+03:30",
+      "last_used": "2025-08-09T20:31:45+03:30"
     }
   ],
   "metadata": {
     "version": "1.0",
     "total_configs": 1,
-    "last_updated": "2025-08-09T19:18:36+03:30"
+    "last_updated": "2025-08-09T20:31:52+03:30"
   }
 }
