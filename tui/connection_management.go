@@ -12,7 +12,7 @@ import (
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
-	parser "go_v2ray_client/parser"
+	"go_v2ray_client/parser"
 )
 
 // connectClient is now a high-level wrapper that delegates to helper methods

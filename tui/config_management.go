@@ -8,7 +8,7 @@ import (
 	"time"
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
-	parser "go_v2ray_client/parser"
+	"go_v2ray_client/parser"
 )
 
 // addConfig adds the current configuration to the saved list

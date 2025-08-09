@@ -54,7 +54,7 @@ func VMessToSingBox(vmessLink string) (map[string]any, error) {
 					},
 				},
 				"tls": map[string]any{
-					"enabled":    v["tls"] == "tls",
+					"enabled":     v["tls"] == "tls",
 					"server_name": v["host"],
 					"utls": map[string]any{
 						"enabled":     true,
@@ -71,7 +71,6 @@ func VMessToSingBox(vmessLink string) (map[string]any, error) {
 
 	return cfg, nil
 }
-
 
 // VMessToV2ray converts a vmess:// link into V2Ray JSON config
 func VMessToV2ray(vmessLink string) (map[string]any, error) {
@@ -180,4 +179,4 @@ func atoiSafe(s string) int {
 	}
 
 	return i
-} 
+}

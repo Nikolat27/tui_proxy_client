@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/gdamore/tcell/v2"
-	parser "go_v2ray_client/parser"
+	"go_v2ray_client/parser"
 )
 
 // clearUI resets the VMess input and config display
