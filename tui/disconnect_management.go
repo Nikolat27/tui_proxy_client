@@ -86,8 +86,7 @@ func (tui *TUI) getPIDsOnPort1080() []string {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	// Fallback to lsof if netstat gave nothing
-	cmd := exec.CommandContext(ctx, "lsof", "-ti:1080")
+	cmd := exec.CommandContext(ctx, "lsof", "-tiTCP:1080", "-sTCP:LISTEN")
 	output, err := cmd.Output()
 	if err != nil {
 		return pids
