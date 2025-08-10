@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=TUI Proxy Client
+Comment=V2Ray Client Configuration Generator
+Exec=tui_proxy_client
+Icon=tui_proxy_client
+Terminal=true
+Type=Application
+Categories=Network;Utility;
+Keywords=proxy;v2ray;tui;terminal; 
