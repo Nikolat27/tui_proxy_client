@@ -1,4 +1,4 @@
-# V2Ray Client Configuration Generator
+# TUI Proxy Client (V2ray and Sing-Box)
 
 ![TUI Proxy Client](project-img.png)
 
