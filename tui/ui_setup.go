@@ -38,7 +38,7 @@ func (tui *TUI) setupUI() {
 
 func (tui *TUI) createTitle() *tview.TextView {
 	return tview.NewTextView().
-		SetText("V2Ray Client Configuration Generator").
+		SetText("Proxy Client").
 		SetTextAlign(tview.AlignCenter).
 		SetTextColor(tcell.ColorYellow).
 		SetDynamicColors(true)
