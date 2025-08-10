@@ -1,5 +1,7 @@
 # V2Ray Client Configuration Generator
 
+![TUI Proxy Client](project-img.png)
+
 A terminal-based user interface (TUI) application for managing V2Ray and sing-box configurations.
 
 ## Features
