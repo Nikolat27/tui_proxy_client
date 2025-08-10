@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"go_v2ray_client/parser"
+	"tui_proxy_client/parser"
 
 	"github.com/gdamore/tcell/v2"
 )

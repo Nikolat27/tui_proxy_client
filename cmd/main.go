@@ -2,7 +2,7 @@ package main
 
 import (
 	"log"
-	"go_v2ray_client/tui"
+	"tui_proxy_client/tui"
 )
 
 func main() {

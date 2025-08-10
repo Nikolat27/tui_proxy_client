@@ -3,7 +3,7 @@ package tui
 import (
 	"encoding/json"
 	"fmt"
-	"go_v2ray_client/parser"
+	"tui_proxy_client/parser"
 	"os"
 	"strings"
 	"time"

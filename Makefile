@@ -5,7 +5,7 @@ test:
 	go test ./... -v
 
 build:
-	go build -o go_v2ray_client cmd/main.go
+	go build -o tui_proxy_client cmd/main.go
 
 clean:
-	rm -f go_v2ray_client
+	rm -f tui_proxy_client
