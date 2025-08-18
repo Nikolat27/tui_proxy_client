@@ -24,4 +24,4 @@ func NewTUI() *TUI {
 // Run starts the TUI application
 func (tui *TUI) Run() error {
 	return tui.app.Run()
-} 
+}

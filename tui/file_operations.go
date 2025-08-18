@@ -110,7 +110,7 @@ func (tui *TUI) exportToCurrentPath() {
 // hasConfigToExport checks if there's an actual config to save
 func (tui *TUI) hasConfigToExport() bool {
 	text := tui.configText.GetText(true)
-	return text != "" && text != "Configuration will appear here..."
+	return text != "" && text != "Logs will appear here...\n\nTip: Press 'c' to copy all logs to clipboard"
 }
 
 // writeConfigToFile handles saving the current config text to a file

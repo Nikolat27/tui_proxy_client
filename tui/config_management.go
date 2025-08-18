@@ -3,10 +3,10 @@ package tui
 import (
 	"encoding/json"
 	"fmt"
-	"tui_proxy_client/parser"
 	"os"
 	"strings"
 	"time"
+	"tui_proxy_client/parser"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"

@@ -1,72 +1,259 @@
 package parser
 
 import (
-	"context"
-	"encoding/json"
-	"os"
-	"os/exec"
 	"testing"
-	"time"
 )
 
 func TestVLESSToSingBox(t *testing.T) {
-	vlessLink := "vless://82a15da6-96cf-45b4-87f4-fe85a36113b5@filmnet.filimnet.com:80?encryption=none&security=none&type=xhttp&host=abriconf.global.ssl.fastly.net&path=%2Fcdn%2Fassets%3Fv%3D12&mode=packet-up"
+	// Test valid VLESS link
+	vlessLink := "vless://12345678-1234-1234-1234-123456789012@example.com:443?encryption=none&security=tls&sni=example.com&type=ws&path=/ws#Test%20Config"
 
 	cfg, err := VLESSToSingBox(vlessLink)
 	if err != nil {
 		t.Fatalf("VLESSToSingBox failed: %v", err)
 	}
 
-	fileName := "test.json"
-	fileData, _ := json.MarshalIndent(cfg, "", "  ")
-	if err := os.WriteFile(fileName, fileData, 0644); err != nil {
-		t.Fatalf("failed to write test.json: %v", err)
+	// Verify required fields exist
+	if cfg == nil {
+		t.Fatal("VLESSToSingBox returned nil config")
 	}
 
-	// Run with timeout
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer cancel()
-	cmd := exec.CommandContext(ctx, "sing-box", "run", "-c", fileName)
-	output, err := cmd.CombinedOutput()
-	t.Logf("Sing-box output:\n%s", string(output))
-
-	if ctx.Err() == context.DeadlineExceeded {
-		// Process ran without fatal config errors for 2 seconds → config is valid
-	} else if err != nil {
-		t.Fatalf("sing-box run failed: %v", err)
+	// Check for required top-level keys
+	requiredKeys := []string{"log", "inbounds", "outbounds"}
+	for _, key := range requiredKeys {
+		if _, exists := cfg[key]; !exists {
+			t.Errorf("VLESSToSingBox missing required key: %s", key)
+		}
 	}
 
-	// Basic field checks
-	outbounds := cfg["outbounds"].([]map[string]any)
-	ob := outbounds[0]
-	if ob["type"] != "vless" {
-		t.Errorf("expected type 'vless', got %v", ob["type"])
+	// Verify outbounds structure
+	outbounds, ok := cfg["outbounds"].([]map[string]any)
+	if !ok {
+		t.Fatal("VLESSToSingBox outbounds is not a slice")
+	}
+
+	if len(outbounds) < 1 {
+		t.Fatal("VLESSToSingBox expected at least 1 outbound")
+	}
+
+	// Check proxy outbound
+	proxy := outbounds[0]
+	if proxy["type"] != "vless" {
+		t.Errorf("VLESSToSingBox proxy type = %v, want vless", proxy["type"])
+	}
+
+	if proxy["server"] != "example.com" {
+		t.Errorf("VLESSToSingBox server = %v, want example.com", proxy["server"])
+	}
+
+	if proxy["server_port"] != 443 {
+		t.Errorf("VLESSToSingBox server_port = %v, want 443", proxy["server_port"])
+	}
+
+	// Check UUID
+	if proxy["uuid"] != "12345678-1234-1234-1234-123456789012" {
+		t.Errorf("VLESSToSingBox uuid = %v, want 12345678-1234-1234-1234-123456789012", proxy["uuid"])
+	}
+}
+
+func TestVLESSToSingBox_InvalidInput(t *testing.T) {
+	tests := []struct {
+		name    string
+		input   string
+		wantErr bool
+	}{
+		{
+			name:    "empty string",
+			input:   "",
+			wantErr: true,
+		},
+		{
+			name:    "invalid prefix",
+			input:   "http://example.com",
+			wantErr: true,
+		},
+		{
+			name:    "missing uuid",
+			input:   "vless://@example.com:443",
+			wantErr: true,
+		},
+		{
+			name:    "invalid uuid format",
+			input:   "vless://invalid-uuid@example.com:443",
+			wantErr: true,
+		},
+		{
+			name:    "missing server",
+			input:   "vless://12345678-1234-1234-1234-123456789012@:443",
+			wantErr: true,
+		},
+		{
+			name:    "missing port",
+			input:   "vless://12345678-1234-1234-1234-123456789012@example.com",
+			wantErr: true,
+		},
+		{
+			name:    "invalid port",
+			input:   "vless://12345678-1234-1234-1234-123456789012@example.com:invalid",
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := VLESSToSingBox(tt.input)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("VLESSToSingBox() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestVLESSToSingBox_ValidConfigs(t *testing.T) {
+	tests := []struct {
+		name      string
+		vlessLink string
+		expected  map[string]interface{}
+	}{
+		{
+			name:      "basic tcp config",
+			vlessLink: "vless://12345678-1234-1234-1234-123456789012@example.com:443?encryption=none&type=tcp#Test%20Config",
+			expected: map[string]interface{}{
+				"server":      "example.com",
+				"server_port": 443,
+				"uuid":        "12345678-1234-1234-1234-123456789012",
+			},
+		},
+		{
+			name:      "tls websocket config",
+			vlessLink: "vless://12345678-1234-1234-1234-123456789012@example.com:443?encryption=none&security=tls&sni=example.com&type=ws&path=/ws#Test%20Config",
+			expected: map[string]interface{}{
+				"server":      "example.com",
+				"server_port": 443,
+				"uuid":        "12345678-1234-1234-1234-123456789012",
+			},
+		},
+		{
+			name:      "grpc config",
+			vlessLink: "vless://12345678-1234-1234-1234-123456789012@example.com:443?encryption=none&security=tls&sni=example.com&type=grpc&serviceName=grpc#Test%20Config",
+			expected: map[string]interface{}{
+				"server":      "example.com",
+				"server_port": 443,
+				"uuid":        "12345678-1234-1234-1234-123456789012",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg, err := VLESSToSingBox(tt.vlessLink)
+			if err != nil {
+				t.Fatalf("VLESSToSingBox() unexpected error: %v", err)
+			}
+
+			outbounds, ok := cfg["outbounds"].([]map[string]any)
+			if !ok || len(outbounds) == 0 {
+				t.Fatal("VLESSToSingBox() outbounds is not valid")
+			}
+
+			proxy := outbounds[0]
+			for key, expectedValue := range tt.expected {
+				if proxy[key] != expectedValue {
+					t.Errorf("VLESSToSingBox() %s = %v, want %v", key, proxy[key], expectedValue)
+				}
+			}
+		})
 	}
 }
 
 func TestVLESSToV2Ray(t *testing.T) {
-	vlessLink := "vless://82a15da6-96cf-45b4-87f4-fe85a36113b5@filmnet.filimnet.com:80?encryption=none&security=none&type=ws&host=abriconf.global.ssl.fastly.net&path=%2Fcdn%2Fassets%3Fv%3D12"
+	// Test valid VLESS link
+	vlessLink := "vless://12345678-1234-1234-1234-123456789012@example.com:443?encryption=none&security=tls&sni=example.com&type=ws&path=/ws#Test%20Config"
 
 	cfg, err := VLESSToV2Ray(vlessLink)
 	if err != nil {
 		t.Fatalf("VLESSToV2Ray failed: %v", err)
 	}
 
-	fileName := "test.json"
-	data, _ := json.MarshalIndent(cfg, "", "  ")
-	if err := os.WriteFile(fileName, data, 0644); err != nil {
-		t.Fatalf("failed to write %s: %v", fileName, err)
+	// Verify required fields exist
+	if cfg == nil {
+		t.Fatal("VLESSToV2ray returned nil config")
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-	defer cancel()
-	cmd := exec.CommandContext(ctx, "v2ray", "run", fileName)
-	output, err := cmd.CombinedOutput()
-	t.Logf("V2Ray output:\n%s", string(output))
+	// Check for required top-level keys
+	requiredKeys := []string{"log", "inbounds", "outbounds"}
+	for _, key := range requiredKeys {
+		if _, exists := cfg[key]; !exists {
+			t.Errorf("VLESSToV2ray missing required key: %s", key)
+		}
+	}
 
-	if ctx.Err() == context.DeadlineExceeded {
-		// No fatal config error detected in 2 seconds
-	} else if err != nil {
-		t.Fatalf("v2ray run failed: %v", err)
+	// Verify outbounds structure
+	outbounds, ok := cfg["outbounds"].([]map[string]any)
+	if !ok {
+		t.Fatal("VLESSToV2ray outbounds is not a slice")
+	}
+
+	if len(outbounds) < 1 {
+		t.Fatal("VLESSToV2ray expected at least 1 outbound")
+	}
+
+	// Check proxy outbound
+	proxy := outbounds[0]
+	if proxy["protocol"] != "vless" {
+		t.Errorf("VLESSToV2ray protocol = %v, want vless", proxy["protocol"])
+	}
+
+	settings, ok := proxy["settings"].(map[string]any)
+	if !ok {
+		t.Fatal("VLESSToV2ray settings is not a map")
+	}
+
+	vnext, ok := settings["vnext"].([]map[string]any)
+	if !ok || len(vnext) == 0 {
+		t.Fatal("VLESSToV2ray vnext is not a valid slice")
+	}
+
+	server := vnext[0]["address"]
+	if server != "example.com" {
+		t.Errorf("VLESSToV2ray server = %v, want example.com", server)
+	}
+}
+
+func TestVLESSToV2Ray_InvalidInput(t *testing.T) {
+	tests := []struct {
+		name    string
+		input   string
+		wantErr bool
+	}{
+		{
+			name:    "empty string",
+			input:   "",
+			wantErr: true,
+		},
+		{
+			name:    "invalid prefix",
+			input:   "http://example.com",
+			wantErr: true,
+		},
+		{
+			name:    "missing uuid",
+			input:   "vless://@example.com:443",
+			wantErr: true,
+		},
+		{
+			name:    "invalid url format",
+			input:   "vless://invalid:url:format",
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := VLESSToV2Ray(tt.input)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("VLESSToV2Ray() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
 	}
 }
