@@ -1,3 +1,5 @@
 config.json
 configs.json
 parser/test.json
+.idea
+.vscode
